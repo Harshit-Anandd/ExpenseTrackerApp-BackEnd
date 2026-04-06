@@ -14,7 +14,7 @@ jobs:
 
       - name: Push to aggregator repo
         env:
-          PAT: ${{ secrets.ActionsToken_PAT }}
+          PAT: ${{ secrets.ACTIONSTOKEN_PAT }}
         run: |
           # Configure Git identity (use your own name/email so commits show as you)
           git config --global user.name "Harshit-Anandd"

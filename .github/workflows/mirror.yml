@@ -1,0 +1,26 @@
+name: Mirror to ExpenseTrackerApp-BackEnd Repo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout service repo
+        uses: actions/checkout@v2
+
+      - name: Push to aggregator repo
+        run: |
+          # Configure Git identity (use your own name/email so commits show as you)
+          git config --global user.name "Harshit-Anandd"
+          git config --global user.email "harshit.anandd@gmail.com"
+
+          # Add aggregator remote
+          git remote add aggregator https://github.com/Harshit-Anandd/ExpenseTrackerApp-BackEnd.git
+          git fetch aggregator
+
+          # Push the entire commit history to aggregator branch
+          git push aggregator main:auth-service --force

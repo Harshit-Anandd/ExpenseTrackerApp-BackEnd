@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout service repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -19,12 +19,20 @@ jobs:
         env:
           PAT: ${{ secrets.ACTIONSTOKEN_PAT }}
         run: |
+          set -euo pipefail
+
+          if [ -z "${PAT:-}" ]; then
+            echo "ERROR: Missing ACTIONSTOKEN_PAT secret."
+            exit 1
+          fi
+
           # Configure Git identity (use your own name/email so commits show as you)
-          git config --global user.name "Harshit-Anandd"
-          git config --global user.email "harshit.anandd@gmail.com"
+          git config --local user.name "Harshit-Anandd"
+          git config --local user.email "harshit.anandd@gmail.com"
 
           # Add aggregator remote
-          git remote add aggregator https://Harshit-Anandd:${PAT}@github.com/Harshit-Anandd/ExpenseTrackerApp-BackEnd.git
+          git remote add aggregator https://github.com/Harshit-Anandd/ExpenseTrackerApp-BackEnd.git
+          git config --local http.https://github.com/.extraheader "Authorization: Basic $(printf "x-access-token:%s" "$PAT" | base64 -w0)"
           git fetch aggregator
 
           # Push the entire commit history to aggregator branch

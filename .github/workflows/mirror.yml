@@ -19,11 +19,12 @@ jobs:
         env:
           PAT: ${{ secrets.ACTIONSTOKEN_PAT }}
         run: |
+          set -euo pipefail
+
           if [ -z "${PAT:-}" ]; then
             echo "ERROR: Missing ACTIONSTOKEN_PAT secret."
             exit 1
           fi
-          set -euo pipefail
 
           # Configure Git identity (use your own name/email so commits show as you)
           git config --global user.name "Harshit-Anandd"

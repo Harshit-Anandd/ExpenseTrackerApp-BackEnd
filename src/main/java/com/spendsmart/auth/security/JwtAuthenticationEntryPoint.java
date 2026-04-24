@@ -44,7 +44,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
                 .error("UNAUTHORIZED")
                 .message("Authentication required. Please provide a valid JWT token.")
                 .path(request.getRequestURI())
-                .timestamp(LocalDateTime.now())
+
                 .build();
         
         ObjectMapper mapper = new ObjectMapper();

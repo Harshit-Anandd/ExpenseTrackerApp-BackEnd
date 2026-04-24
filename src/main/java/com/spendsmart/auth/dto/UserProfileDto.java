@@ -69,9 +69,13 @@ public class UserProfileDto {
     private Boolean isActive;
 
     /**
-     * User's monthly budget.
+     * User's subscription type (NORMAL or PAID).
      */
-    private Double monthlyBudget;
+    private String subscriptionType;
+
+    private Boolean emailVerified;
+
+    private Boolean twoFactorEnabled;
 
     /**
      * Account creation timestamp (UTC).

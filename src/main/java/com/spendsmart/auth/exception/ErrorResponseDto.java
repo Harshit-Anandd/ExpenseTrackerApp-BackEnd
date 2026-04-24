@@ -9,13 +9,10 @@
  */
 package com.spendsmart.auth.exception;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -46,8 +43,8 @@ public class ErrorResponseDto {
     /**
      * Timestamp when the error occurred (UTC).
      */
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime timestamp;
+    @Builder.Default
+    private String timestamp = java.time.LocalDateTime.now().toString();
 
     /**
      * Additional details about the error (optional).

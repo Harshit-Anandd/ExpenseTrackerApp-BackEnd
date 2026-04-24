@@ -44,7 +44,7 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
                 .error("FORBIDDEN")
                 .message("You do not have permission to access this resource.")
                 .path(request.getRequestURI())
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         ObjectMapper mapper = new ObjectMapper();

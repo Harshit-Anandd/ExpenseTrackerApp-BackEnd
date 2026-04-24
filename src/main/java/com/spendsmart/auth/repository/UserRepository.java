@@ -65,6 +65,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     List<User> findByCurrency(String currency);
 
+    List<User> findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(String email, String fullName);
+
     /**
      * Count the number of active or inactive users.
      * Useful for analytics and reporting.

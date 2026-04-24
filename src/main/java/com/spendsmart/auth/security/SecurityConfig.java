@@ -48,6 +48,12 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Autowired
+    private OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+
+    @Autowired
+    private OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
+
     /**
      * Configure HTTP security for the application.
      * Defines endpoint access rules and filter registration.
@@ -75,12 +81,23 @@ public class SecurityConfig {
                 // Public endpoints
                 .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
                 .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
+                .requestMatchers(HttpMethod.POST, "/auth/otp/verify").permitAll()
+                .requestMatchers(HttpMethod.POST, "/auth/otp/resend").permitAll()
+                .requestMatchers(HttpMethod.POST, "/auth/oauth2/google").permitAll()
                 .requestMatchers("/auth/login/oauth2/**").permitAll()
+                .requestMatchers("/login/oauth2/**").permitAll()
                 .requestMatchers("/oauth2/**").permitAll()
 
-                // Health check and actuator endpoints (optional)
+                // Swagger/OpenAPI endpoints
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+
+                // Health check and actuator endpoints
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/health").permitAll()
+
+                // Admin endpoints
+                .requestMatchers("/admin/**").hasRole("ADMIN")
 
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
@@ -90,6 +107,11 @@ public class SecurityConfig {
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint(new JwtAuthenticationEntryPoint())
                 .accessDeniedHandler(new JwtAccessDeniedHandler())
+            )
+
+            .oauth2Login(oauth2 -> oauth2
+                .successHandler(oAuth2AuthenticationSuccessHandler)
+                .failureHandler(oAuth2AuthenticationFailureHandler)
             );
 
         // Register JWT filter before UsernamePasswordAuthenticationFilter
@@ -110,6 +132,7 @@ public class SecurityConfig {
 
         // Allowed origins (configure based on environment)
         config.setAllowedOrigins(Arrays.asList(
+            "http://localhost:5173",      // Local development (Vite)
             "http://localhost:3000",      // Local development (React on port 3000)
             "http://localhost:8080",      // Local backend
             "https://spendsmart.app"      // Production frontend (change as needed)

@@ -14,6 +14,8 @@ package com.spendsmart.auth.service;
 import com.spendsmart.auth.dto.*;
 import com.spendsmart.auth.entity.User;
 
+import java.util.List;
+
 public interface AuthService {
 
     /**
@@ -63,12 +65,17 @@ public interface AuthService {
      */
     AuthResponseDto refreshToken(RefreshTokenDto refreshTokenDto);
 
+    AuthResponseDto verifyOtp(OtpVerificationDto otpVerificationDto);
+
+    AuthResponseDto resendOtp(OtpResendDto otpResendDto);
+
     /**
-     * Logout a user by invalidating their session.
+     * Logout a user by invalidating their current access token and optional refresh token.
      *
-     * @param token the access token to invalidate
+     * @param accessToken the access token from Authorization header
+     * @param refreshToken optional refresh token from request body
      */
-    void logout(String token);
+    void logout(String accessToken, String refreshToken);
 
     /**
      * Get user by their unique ID.
@@ -127,6 +134,16 @@ public interface AuthService {
      * @throws ResourceNotFoundException if user not found
      */
     void deactivateAccount(Long userId);
+
+    void setTwoFactor(Long userId, boolean enabled);
+
+    List<AdminUserDto> getAllUsersForAdmin(String query, Boolean active, String role, String subscriptionType);
+
+    AdminUserDto updateUserStatus(Long userId, boolean active);
+
+    AdminUserDto updateUserRole(Long userId, String role);
+
+    AdminUserDto updateUserSubscription(Long userId, String subscriptionType);
 
     /**
      * Get the user profile as a DTO (safe for API responses).

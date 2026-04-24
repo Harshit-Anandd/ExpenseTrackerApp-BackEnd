@@ -96,6 +96,20 @@ public class User {
     private String avatarUrl;
 
     /**
+     * Provider-specific ID (e.g., Google user ID).
+     */
+    @Column(name = "provider_id", length = 255)
+    private String providerId;
+
+    /**
+     * Subscription type (NORMAL = free tier, PAID = premium features).
+     */
+    @Column(name = "subscription_type", nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private SubscriptionType subscriptionType = SubscriptionType.NORMAL;
+
+    /**
      * Authentication provider (LOCAL for email/password, GOOGLE for OAuth2).
      * Determines whether the user has a local password or authenticates via OAuth2.
      */
@@ -122,6 +136,14 @@ public class User {
     @Builder.Default
     private Boolean isActive = true;
 
+    @Column(name = "email_verified", nullable = false)
+    @Builder.Default
+    private Boolean emailVerified = false;
+
+    @Column(name = "two_factor_enabled", nullable = false)
+    @Builder.Default
+    private Boolean twoFactorEnabled = false;
+
     /**
      * Account creation timestamp (UTC).
      * Set automatically by Hibernate.
@@ -138,14 +160,7 @@ public class User {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    /**
-     * Monthly budget allocated by the user.
-     * Used downstream by the financial health service for calculations.
-     * Default: 5000.0
-     */
-    @Column(nullable = false)
-    @Builder.Default
-    private Double monthlyBudget = 5000.0;
+
 
     /**
      * Enumeration for authentication providers.
@@ -163,6 +178,14 @@ public class User {
     public enum Role {
         USER,       // Regular user with standard permissions
         ADMIN       // Administrator with elevated permissions
+    }
+
+    /**
+     * Subscription tiers for the platform.
+     */
+    public enum SubscriptionType {
+        NORMAL,     // Free tier with limited features
+        PAID        // Premium tier with all features
     }
 }
 

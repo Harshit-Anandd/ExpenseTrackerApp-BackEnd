@@ -43,7 +43,7 @@ public class GlobalExceptionHandler {
                 .error("USER_ALREADY_EXISTS")
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.CONFLICT);
@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
                 .error("INVALID_CREDENTIALS")
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
@@ -85,7 +85,7 @@ public class GlobalExceptionHandler {
                 .error("TOKEN_REFRESH_FAILED")
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
@@ -106,7 +106,7 @@ public class GlobalExceptionHandler {
                 .error("ACCOUNT_DEACTIVATED")
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.FORBIDDEN);
@@ -127,7 +127,7 @@ public class GlobalExceptionHandler {
                 .error("RESOURCE_NOT_FOUND")
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
@@ -148,7 +148,7 @@ public class GlobalExceptionHandler {
                 .error("OAUTH2_AUTHENTICATION_FAILED")
                 .message(ex.getMessage())
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
@@ -175,7 +175,7 @@ public class GlobalExceptionHandler {
                 .error("VALIDATION_FAILED")
                 .message("Request validation failed")
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .details(errors)
                 .build();
 
@@ -197,7 +197,7 @@ public class GlobalExceptionHandler {
                 .error("BAD_CREDENTIALS")
                 .message("Invalid email or password")
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.UNAUTHORIZED);
@@ -218,7 +218,7 @@ public class GlobalExceptionHandler {
                 .error("INTERNAL_SERVER_ERROR")
                 .message("An unexpected error occurred. Please try again later.")
                 .path(request.getDescription(false).replace("uri=", ""))
-                .timestamp(LocalDateTime.now())
+
                 .build();
 
         return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);

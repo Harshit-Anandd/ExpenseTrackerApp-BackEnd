@@ -40,6 +40,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private JwtUtils jwtUtils;
 
+    @Autowired
+    private TokenBlocklistService tokenBlocklistService;
+
     /**
      * Filter method executed for each incoming HTTP request.
      * Checks for and validates JWT tokens in the Authorization header.
@@ -52,8 +55,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             // Extract token from Authorization header (format: "Bearer <token>")
             String token = extractTokenFromRequest(request);
+            boolean isRevoked = token != null && tokenBlocklistService.isRevoked(token);
 
-            if (token != null && jwtUtils.validateToken(token)) {
+            if (token != null && !isRevoked && jwtUtils.validateToken(token)) {
                 // Token is valid, extract claims and populate SecurityContext
                 Claims claims = jwtUtils.getClaimsFromToken(token);
 
@@ -77,6 +81,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
                 log.debug("JWT token validated for user: {}", email);
+            } else if (isRevoked) {
+                log.debug("Rejected revoked JWT token");
             }
         } catch (Exception ex) {
             log.warn("JWT filter processing failed: {}", ex.getMessage());

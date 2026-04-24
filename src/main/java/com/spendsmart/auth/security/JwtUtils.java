@@ -52,11 +52,12 @@ public class JwtUtils {
      * @param role the user's role (USER or ADMIN)
      * @return a signed JWT string
      */
-    public String generateAccessToken(Long userId, String email, String role) {
+    public String generateAccessToken(Long userId, String email, String role, String subscriptionType) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("email", email);
         claims.put("role", role);
+        claims.put("subscriptionType", subscriptionType != null ? subscriptionType : "NORMAL");
 
         return createToken(claims, email, accessTokenExpiration, false);
     }

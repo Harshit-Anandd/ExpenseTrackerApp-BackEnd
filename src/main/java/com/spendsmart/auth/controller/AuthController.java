@@ -23,6 +23,7 @@ package com.spendsmart.auth.controller;
 import com.spendsmart.auth.dto.*;
 import com.spendsmart.auth.security.JwtUserDetails;
 import com.spendsmart.auth.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,11 +31,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
 @Slf4j
-@CrossOrigin(origins = {"http://localhost:3000", "https://spendsmart.app"})
 public class AuthController {
 
     @Autowired
@@ -89,6 +90,33 @@ public class AuthController {
     }
 
     /**
+     * Handle OAuth2 Google Login
+     */
+    @PostMapping("/oauth2/google")
+    public ResponseEntity<AuthResponseDto> googleLogin(@RequestBody Map<String, String> payload) {
+        log.info("Google OAuth login endpoint called");
+        String email = payload.get("email");
+        String name = payload.get("name");
+        String avatarUrl = payload.get("avatarUrl");
+        AuthResponseDto response = authService.handleGoogleOAuth2Login(email, name, avatarUrl);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/otp/verify")
+    public ResponseEntity<AuthResponseDto> verifyOtp(@Valid @RequestBody OtpVerificationDto otpVerificationDto) {
+        log.info("OTP verify endpoint called for email: {}, purpose: {}", otpVerificationDto.getEmail(), otpVerificationDto.getPurpose());
+        AuthResponseDto response = authService.verifyOtp(otpVerificationDto);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/otp/resend")
+    public ResponseEntity<AuthResponseDto> resendOtp(@Valid @RequestBody OtpResendDto otpResendDto) {
+        log.info("OTP resend endpoint called for email: {}, purpose: {}", otpResendDto.getEmail(), otpResendDto.getPurpose());
+        AuthResponseDto response = authService.resendOtp(otpResendDto);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Logout a user (invalidate current session).
      *
      * HTTP: POST /auth/logout
@@ -98,9 +126,13 @@ public class AuthController {
      * @return 200 OK with success message
      */
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(Authentication authentication) {
-        log.info("Logout endpoint called for user: {}", authentication.getName());
-        authService.logout(extractTokenFromContext(authentication));
+    public ResponseEntity<?> logout(Authentication authentication,
+                                    HttpServletRequest request,
+                                    @RequestBody(required = false) LogoutRequestDto logoutRequest) {
+        String username = authentication != null ? authentication.getName() : "unknown";
+        String refreshToken = logoutRequest != null ? logoutRequest.getRefreshToken() : null;
+        log.info("Logout endpoint called for user: {}", username);
+        authService.logout(extractTokenFromRequest(request), refreshToken);
         return ResponseEntity.ok(new MessageDto("Logged out successfully"));
     }
 
@@ -198,6 +230,16 @@ public class AuthController {
         return ResponseEntity.ok(new MessageDto("Account deactivated successfully"));
     }
 
+    @PutMapping("/2fa")
+    public ResponseEntity<?> setTwoFactor(
+            @Valid @RequestBody TwoFactorToggleDto request,
+            Authentication authentication) {
+        Long userId = extractUserIdFromContext(authentication);
+        log.info("2FA update endpoint called for user ID: {} enabled: {}", userId, request.getEnabled());
+        authService.setTwoFactor(userId, request.getEnabled());
+        return ResponseEntity.ok(new MessageDto("Two-factor authentication updated successfully"));
+    }
+
     /**
      * Extract userId from the authenticated user's JWT claims.
      *
@@ -211,15 +253,11 @@ public class AuthController {
         throw new IllegalArgumentException("Invalid authentication context");
     }
 
-    /**
-     * Extract JWT token from authentication context.
-     *
-     * @param authentication the Spring Security authentication object
-     * @return the JWT token (not used in this implementation, but kept for future use)
-     */
-    private String extractTokenFromContext(Authentication authentication) {
-        // In a stateless JWT setup, we don't store tokens server-side
-        // This is a placeholder for future blocklist implementation
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String authorizationHeader = request.getHeader("Authorization");
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            return authorizationHeader.substring(7);
+        }
         return "";
     }
 }

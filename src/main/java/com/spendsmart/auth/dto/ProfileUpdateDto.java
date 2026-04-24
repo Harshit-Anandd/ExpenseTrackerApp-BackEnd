@@ -55,11 +55,5 @@ public class ProfileUpdateDto {
      */
     @Size(max = 10, message = "Currency must not exceed 10 characters")
     private String currency;
-
-    /**
-     * Updated monthly budget (optional).
-     * Used for financial health calculations.
-     */
-    private Double monthlyBudget;
 }
 

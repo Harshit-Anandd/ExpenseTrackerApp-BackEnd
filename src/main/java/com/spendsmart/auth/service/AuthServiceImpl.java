@@ -21,8 +21,10 @@ package com.spendsmart.auth.service;
 import com.spendsmart.auth.dto.*;
 import com.spendsmart.auth.entity.User;
 import com.spendsmart.auth.exception.*;
+import com.spendsmart.auth.messaging.AuthEventPublisher;
 import com.spendsmart.auth.repository.UserRepository;
 import com.spendsmart.auth.security.JwtUtils;
+import com.spendsmart.auth.security.TokenBlocklistService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class AuthServiceImpl implements AuthService {
 
+    private static final String SEVERITY_INFO = "INFO";
+    private static final String SEVERITY_WARNING = "WARNING";
+
     @Autowired
     private UserRepository userRepository;
 
@@ -42,6 +47,15 @@ public class AuthServiceImpl implements AuthService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private TokenBlocklistService tokenBlocklistService;
+
+    @Autowired
+    private OtpChallengeService otpChallengeService;
+
+    @Autowired
+    private AuthEventPublisher authEventPublisher;
 
     /**
      * Register a new user with validation.
@@ -73,17 +87,18 @@ public class AuthServiceImpl implements AuthService {
                 .provider(User.Provider.LOCAL)
                 .role(User.Role.USER)
                 .isActive(true)
+                .emailVerified(false)
+                .twoFactorEnabled(false)
                 .currency("USD")
                 .timezone("UTC")
-                .monthlyBudget(5000.0)
                 .build();
 
         // Save to database
         user = userRepository.save(user);
         log.info("User registered successfully: {} (ID: {})", user.getEmail(), user.getUserId());
 
-        // Generate tokens and return response
-        return generateAuthResponse(user);
+        return issueOtpChallengeResponse(user, OtpPurpose.SIGNUP,
+                "Verify your email with the OTP sent to complete signup.");
     }
 
     /**
@@ -115,6 +130,18 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException("Invalid email or password.");
         }
 
+        if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+            log.info("Login requires signup verification OTP for user: {}", loginDto.getEmail());
+            return issueOtpChallengeResponse(user, OtpPurpose.SIGNUP,
+                    "Verify your email with OTP before logging in.");
+        }
+
+        if (Boolean.TRUE.equals(user.getTwoFactorEnabled())) {
+            log.info("Login requires 2FA OTP for user: {}", loginDto.getEmail());
+            return issueOtpChallengeResponse(user, OtpPurpose.LOGIN_2FA,
+                    "Enter the OTP sent to your email to complete login.");
+        }
+
         log.info("User logged in successfully: {}", loginDto.getEmail());
         return generateAuthResponse(user);
     }
@@ -138,9 +165,9 @@ public class AuthServiceImpl implements AuthService {
                             .provider(User.Provider.GOOGLE)
                             .role(User.Role.USER)
                             .isActive(true)
+                            .emailVerified(true)
                             .currency("USD")
                             .timezone("UTC")
-                            .monthlyBudget(5000.0)
                             // No password for Google-only accounts
                             .build();
                     return userRepository.save(newUser);
@@ -183,6 +210,11 @@ public class AuthServiceImpl implements AuthService {
 
         String refreshToken = refreshTokenDto.getRefreshToken();
 
+        if (tokenBlocklistService.isRevoked(refreshToken)) {
+            log.warn("Token refresh failed: refresh token already revoked/reused");
+            throw new TokenRefreshException("Refresh token has already been used. Please log in again.");
+        }
+
         // Validate refresh token
         if (!jwtUtils.validateToken(refreshToken)) {
             log.warn("Token refresh failed: invalid or expired refresh token");
@@ -199,21 +231,109 @@ public class AuthServiceImpl implements AuthService {
         Long userId = jwtUtils.getUserIdFromToken(refreshToken);
         User user = getUserById(userId);
 
+        if (!user.getIsActive()) {
+            log.warn("Token refresh failed: account deactivated: {}", user.getEmail());
+            throw new DeactivatedAccountException(
+                    "Your account has been deactivated. Contact support to reactivate it."
+            );
+        }
+
+        // Single-use refresh tokens: revoke the old refresh token until its natural expiration.
+        long ttlMillis = jwtUtils.getTimeRemainingInToken(refreshToken);
+        tokenBlocklistService.revokeToken(refreshToken, ttlMillis);
+
         log.info("Token refreshed successfully for user: {}", user.getEmail());
         return generateAuthResponse(user);
     }
 
+    @Override
+    public AuthResponseDto verifyOtp(OtpVerificationDto otpVerificationDto) {
+        OtpPurpose purpose;
+        try {
+            purpose = OtpPurpose.from(otpVerificationDto.getPurpose());
+        } catch (Exception ex) {
+            throw new InvalidCredentialsException("Invalid OTP purpose.");
+        }
+
+        boolean valid = otpChallengeService.verify(
+                otpVerificationDto.getEmail(),
+                purpose,
+                otpVerificationDto.getChallengeId(),
+                otpVerificationDto.getOtpCode()
+        );
+
+        if (!valid) {
+            throw new InvalidCredentialsException("Invalid or expired OTP.");
+        }
+
+        User user = getUserByEmail(otpVerificationDto.getEmail());
+        if (!user.getIsActive()) {
+            throw new DeactivatedAccountException(
+                    "Your account has been deactivated. Contact support to reactivate it."
+            );
+        }
+
+        if (purpose == OtpPurpose.SIGNUP && !Boolean.TRUE.equals(user.getEmailVerified())) {
+            user.setEmailVerified(true);
+            userRepository.save(user);
+            log.info("Email verified for user: {}", user.getEmail());
+        }
+
+        return generateAuthResponse(user);
+    }
+
+    @Override
+    public AuthResponseDto resendOtp(OtpResendDto otpResendDto) {
+        User user = getUserByEmail(otpResendDto.getEmail());
+
+        OtpPurpose purpose;
+        try {
+            purpose = OtpPurpose.from(otpResendDto.getPurpose());
+        } catch (Exception ex) {
+            throw new InvalidCredentialsException("Invalid OTP purpose.");
+        }
+
+        if (purpose == OtpPurpose.SIGNUP && Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new InvalidCredentialsException("Email is already verified.");
+        }
+
+        if (purpose == OtpPurpose.LOGIN_2FA && !Boolean.TRUE.equals(user.getTwoFactorEnabled())) {
+            throw new InvalidCredentialsException("Two-factor authentication is not enabled for this account.");
+        }
+
+        return issueOtpChallengeResponse(user, purpose, "A new OTP has been sent.");
+    }
+
     /**
-     * Logout user by invalidating token.
-     * In a stateless JWT setup, this is mainly for logging.
-     * Optionally, tokens could be added to a blocklist.
+     * Logout user by revoking access token and optional refresh token.
      */
     @Override
-    public void logout(String token) {
-        log.info("User logout: token invalidated");
-        // In a stateless JWT architecture, we log the logout.
-        // For enhanced security, the token could be added to a Redis blocklist
-        // with expiration equal to token TTL. For now, we rely on token expiration.
+    public void logout(String accessToken, String refreshToken) {
+        revokeIfValid(accessToken, false, "access");
+        revokeIfValid(refreshToken, true, "refresh");
+    }
+
+    private void revokeIfValid(String token, boolean requireRefreshType, String tokenLabel) {
+        if (token == null || token.isBlank()) {
+            if (!requireRefreshType) {
+                log.warn("Logout requested without {} token", tokenLabel);
+            }
+            return;
+        }
+
+        if (!jwtUtils.validateToken(token)) {
+            log.warn("Logout requested with invalid/expired {} token", tokenLabel);
+            return;
+        }
+
+        if (requireRefreshType && !jwtUtils.isRefreshToken(token)) {
+            log.warn("Logout requested with non-refresh token in refresh slot");
+            return;
+        }
+
+        long ttlMillis = jwtUtils.getTimeRemainingInToken(token);
+        tokenBlocklistService.revokeToken(token, ttlMillis);
+        log.info("User logout: {} token revoked for {} ms", tokenLabel, ttlMillis);
     }
 
     /**
@@ -281,10 +401,7 @@ public class AuthServiceImpl implements AuthService {
             log.debug("Updated currency for user: {}", userId);
         }
 
-        if (profileUpdateDto.getMonthlyBudget() != null) {
-            user.setMonthlyBudget(profileUpdateDto.getMonthlyBudget());
-            log.debug("Updated monthlyBudget for user: {}", userId);
-        }
+
 
         user = userRepository.save(user);
         log.info("Profile updated successfully for user: {}", userId);
@@ -360,6 +477,122 @@ public class AuthServiceImpl implements AuthService {
         log.info("Account deactivated successfully for user: {}", userId);
     }
 
+    @Override
+    public void setTwoFactor(Long userId, boolean enabled) {
+        User user = getUserById(userId);
+
+        if (user.getProvider() != User.Provider.LOCAL) {
+            throw new InvalidCredentialsException("2FA can only be managed for local-authenticated accounts.");
+        }
+
+        if (enabled && !Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new InvalidCredentialsException("Verify your email before enabling 2FA.");
+        }
+
+        user.setTwoFactorEnabled(enabled);
+        userRepository.save(user);
+        log.info("2FA updated for user {}: {}", user.getEmail(), enabled);
+        authEventPublisher.publish(
+                "TWO_FACTOR_UPDATED",
+                user.getUserId(),
+                user.getEmail(),
+                "Two-factor authentication updated",
+                enabled ? "Two-factor authentication has been enabled." : "Two-factor authentication has been disabled.",
+                SEVERITY_INFO,
+                null
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<AdminUserDto> getAllUsersForAdmin(String query, Boolean active, String role, String subscriptionType) {
+        java.util.List<User> users;
+        if (query != null && !query.isBlank()) {
+            users = userRepository.findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(query.trim(), query.trim());
+        } else {
+            users = userRepository.findAll();
+        }
+
+        return users.stream()
+                .filter(user -> active == null || active.equals(user.getIsActive()))
+                .filter(user -> role == null || role.isBlank() || user.getRole().name().equalsIgnoreCase(role))
+                .filter(user -> subscriptionType == null || subscriptionType.isBlank() || user.getSubscriptionType().name().equalsIgnoreCase(subscriptionType))
+                .map(this::mapUserToAdminDto)
+                .toList();
+    }
+
+    @Override
+    public AdminUserDto updateUserStatus(Long userId, boolean active) {
+        User user = getUserById(userId);
+        user.setIsActive(active);
+        user = userRepository.save(user);
+
+        authEventPublisher.publish(
+                "ADMIN_USER_STATUS_CHANGED",
+                user.getUserId(),
+                user.getEmail(),
+                "Account status updated",
+                active ? "Your account has been activated by an administrator."
+                        : "Your account has been suspended by an administrator.",
+                active ? SEVERITY_INFO : SEVERITY_WARNING,
+                null
+        );
+
+        return mapUserToAdminDto(user);
+    }
+
+    @Override
+    public AdminUserDto updateUserRole(Long userId, String role) {
+        User user = getUserById(userId);
+        User.Role parsedRole;
+        try {
+            parsedRole = User.Role.valueOf(role.trim().toUpperCase());
+        } catch (Exception ex) {
+            throw new InvalidCredentialsException("Invalid role value. Allowed values: USER, ADMIN.");
+        }
+
+        user.setRole(parsedRole);
+        user = userRepository.save(user);
+
+        authEventPublisher.publish(
+                "ADMIN_USER_ROLE_CHANGED",
+                user.getUserId(),
+                user.getEmail(),
+                "Role updated",
+                "Your role has been updated to " + parsedRole.name() + ".",
+                SEVERITY_INFO,
+                null
+        );
+
+        return mapUserToAdminDto(user);
+    }
+
+    @Override
+    public AdminUserDto updateUserSubscription(Long userId, String subscriptionType) {
+        User user = getUserById(userId);
+        User.SubscriptionType parsedSubscription;
+        try {
+            parsedSubscription = User.SubscriptionType.valueOf(subscriptionType.trim().toUpperCase());
+        } catch (Exception ex) {
+            throw new InvalidCredentialsException("Invalid subscriptionType value. Allowed values: NORMAL, PAID.");
+        }
+
+        user.setSubscriptionType(parsedSubscription);
+        user = userRepository.save(user);
+
+        authEventPublisher.publish(
+                "ADMIN_USER_SUBSCRIPTION_CHANGED",
+                user.getUserId(),
+                user.getEmail(),
+                "Subscription updated",
+                "Your subscription has been updated to " + parsedSubscription.name() + ".",
+                SEVERITY_INFO,
+                null
+        );
+
+        return mapUserToAdminDto(user);
+    }
+
     /**
      * Get user profile as DTO (safe for API responses).
      */
@@ -377,7 +610,7 @@ public class AuthServiceImpl implements AuthService {
      * @return AuthResponseDto with tokens and user info
      */
     private AuthResponseDto generateAuthResponse(User user) {
-        String accessToken = jwtUtils.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name());
+        String accessToken = jwtUtils.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name(), user.getSubscriptionType().name());
         String refreshToken = jwtUtils.generateRefreshToken(user.getUserId(), user.getEmail());
 
         return AuthResponseDto.builder()
@@ -389,6 +622,33 @@ public class AuthServiceImpl implements AuthService {
                 .fullName(user.getFullName())
                 .role(user.getRole().name())
                 .expiresIn((long) (24 * 60 * 60)) // 24 hours in seconds
+                .requiresOtp(false)
+                .build();
+    }
+
+    private AuthResponseDto issueOtpChallengeResponse(User user, OtpPurpose purpose, String message) {
+        OtpChallenge challenge = otpChallengeService.createChallenge(user.getEmail(), purpose);
+
+        authEventPublisher.publish(
+                "OTP_CHALLENGE_CREATED",
+                user.getUserId(),
+                user.getEmail(),
+                "OTP verification required",
+                "A one-time password was generated for " + purpose.name() + ".",
+                SEVERITY_INFO,
+                challenge.otpCode()
+        );
+
+        return AuthResponseDto.builder()
+                .userId(user.getUserId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .role(user.getRole().name())
+                .requiresOtp(true)
+                .otpPurpose(purpose.name())
+                .otpChallengeId(challenge.challengeId())
+                .otpExpiresInSeconds(challenge.expiresInSeconds())
+                .message(message)
                 .build();
     }
 
@@ -409,9 +669,26 @@ public class AuthServiceImpl implements AuthService {
                 .provider(user.getProvider().name())
                 .role(user.getRole().name())
                 .isActive(user.getIsActive())
-                .monthlyBudget(user.getMonthlyBudget())
+                .subscriptionType(user.getSubscriptionType().name())
+                .emailVerified(user.getEmailVerified())
+                .twoFactorEnabled(user.getTwoFactorEnabled())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
+                .build();
+    }
+
+    private AdminUserDto mapUserToAdminDto(User user) {
+        return AdminUserDto.builder()
+                .userId(user.getUserId())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .role(user.getRole().name())
+                .subscriptionType(user.getSubscriptionType().name())
+                .isActive(user.getIsActive())
+                .provider(user.getProvider().name())
+                .emailVerified(user.getEmailVerified())
+                .twoFactorEnabled(user.getTwoFactorEnabled())
+                .createdAt(user.getCreatedAt())
                 .build();
     }
 }

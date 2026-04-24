@@ -62,5 +62,15 @@ public class AuthResponseDto {
      * Time to live (in seconds) for the access token.
      */
     private Long expiresIn;
+
+    private Boolean requiresOtp;
+
+    private String otpPurpose;
+
+    private String otpChallengeId;
+
+    private Long otpExpiresInSeconds;
+
+    private String message;
 }
 

@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT}
   servlet:
     context-path: /
 
@@ -21,9 +21,9 @@ spring:
 
   # MySQL Database Configuration
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:spendsmart_auth}?useSSL=${DB_USE_SSL:false}&serverTimezone=UTC&allowPublicKeyRetrieval=true&allowLoadLocal=false
-    username: ${DB_USER:root}
-    password: ${DB_PASSWORD:password}
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?useSSL=${DB_USE_SSL}&serverTimezone=UTC&allowPublicKeyRetrieval=true&allowLoadLocal=false
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -40,24 +40,24 @@ spring:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID:928257460065-f5b4ncthdi6041hp8r3j14imjg9bvev3.apps.googleusercontent.com}
-            client-secret: ${GOOGLE_CLIENT_SECRET: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}
-            redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: ${GOOGLE_REDIRECT_URI:http}
             scope: profile,email
             client-name: Google
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
       timeout: 2s
 
   rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
 
   # Jackson Configuration
   jackson:
@@ -75,7 +75,7 @@ spring:
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_SERVER_URL}
     register-with-eureka: true
     fetch-registry: true
   instance:
@@ -86,7 +86,7 @@ eureka:
 
 # JWT Configuration
 jwt:
-  secret: ${JWT_SECRET:M4b4B1mesNla14a3Okeb89NVfQOqQnvfsF5rHL+raGqYntqOt++6qIa3J5bFfEvnhoNEOkxE07T0vLW1S44BIg==}
+  secret: ${JWT_SECRET}
   expiration: 86400000  # 24 hours
   refresh-expiration: 604800000  # 7 days
 
@@ -110,10 +110,10 @@ springdoc:
 
 app:
   oauth2:
-    redirect-success-url: ${OAUTH2_SUCCESS_REDIRECT_URL:http://localhost:5173/oauth/callback}
-    redirect-failure-url: ${OAUTH2_FAILURE_REDIRECT_URL:http://localhost:5173/login}
+    redirect-success-url: ${OAUTH2_SUCCESS_REDIRECT_URL}
+    redirect-failure-url: ${OAUTH2_FAILURE_REDIRECT_URL}
   messaging:
-    auth-notification-exchange: ${AUTH_NOTIFICATION_EXCHANGE:spendsmart.auth.events}
-    auth-notification-routing-key: ${AUTH_NOTIFICATION_ROUTING_KEY:auth.notification}
-    auth-notification-queue: ${AUTH_NOTIFICATION_QUEUE:spendsmart.auth.notifications}
+    auth-notification-exchange: ${AUTH_NOTIFICATION_EXCHANGE}
+    auth-notification-routing-key: ${AUTH_NOTIFICATION_ROUTING_KEY}
+    auth-notification-queue: ${AUTH_NOTIFICATION_QUEUE}
 
